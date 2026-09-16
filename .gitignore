@@ -1,8 +1,4 @@
-.venv/
-.rpa_profile/
-__pycache__/
-*.pyc
-config.yaml
+config.json
 data/lojas.csv
 output/
 *.log
