@@ -1,0 +1,22 @@
+{
+  "bi": {
+    "url": "https://app.powerbi.com/",
+    "exportWaitSeconds": 300
+  },
+  "excel": {
+    "worksheet": "",
+    "storeColumn": "Loja"
+  },
+  "message": {
+    "title": "PARCIAL OPERACIONAL | {loja}",
+    "fields": [],
+    "maxAutoFields": 10,
+    "includeRecordCount": true,
+    "footer": ""
+  },
+  "whatsapp": {
+    "dryRun": true,
+    "waitSeconds": 12,
+    "delayBetweenMessagesSeconds": 4
+  }
+}
