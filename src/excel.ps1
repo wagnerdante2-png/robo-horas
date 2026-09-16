@@ -1,3 +1,260 @@
-function Message($store,$ws,$row,$headers,$idx,$cfg,$count){$lines=New-Object System.Collections.Generic.List[string];$lines.Add(([string]$cfg.message.title).Replace('{loja}',$store));$lines.Add('');if($cfg.message.includeRecordCount-and$count-gt1){$lines.Add("Registros no relatorio: $count");$lines.Add('')};$fields=@($cfg.message.fields);if($fields.Count-eq0){$fields=@();foreach($h in $headers){if($h-ne[string]$cfg.excel.storeColumn){$fields+=$h;if($fields.Count-ge[int]$cfg.message.maxAutoFields){break}}}};foreach($f in $fields){if($idx.ContainsKey([string]$f)){$v=[string]$ws.Cells.Item($row,[int]$idx[[string]$f]).Text;if(-not$v){$v='-'};$lines.Add(('{0}: {1}'-f$f,$v))}};return[string]::Join([Environment]::NewLine,$lines)}
-function SendWA($chrome,$profile,$phone,$msg,$wait){$url='https://web.whatsapp.com/send?phone='+$phone+'&text='+[uri]::EscapeDataString($msg);Start-Process -FilePath $chrome -ArgumentList ("--user-data-dir=`"$profile`" --start-maximized `"$url`"")|Out-Null;Start-Sleep -Seconds $wait;$sh=New-Object -ComObject WScript.Shell;$ok=$false;for($i=0;$i-lt8;$i++){if($sh.AppActivate('WhatsApp')){$ok=$true;break};Start-Sleep 1};if(-not$ok){throw 'Janela do WhatsApp nao encontrada.'};$sh.SendKeys('{ENTER}')}
-function ProcessExcel($path,$cfg,$map,$chrome,$profile){$xl=$null;$wb=$null;$ws=$null;try{$xl=New-Object -ComObject Excel.Application;$xl.Visible=$false;$xl.DisplayAlerts=$false;$wb=$xl.Workbooks.Open($path,0,$true);if([string]$cfg.excel.worksheet){$ws=$wb.Worksheets.Item([string]$cfg.excel.worksheet)}else{$ws=$wb.Worksheets.Item(1)};$u=$ws.UsedRange;$rows=[int]$u.Rows.Count;$cols=[int]$u.Columns.Count;$headers=@();$idx=@{};for($c=1;$c-le$cols;$c++){$h=([string]$ws.Cells.Item(1,$c).Text).Trim();if(-not$h){$h="Coluna$c"};$headers+=$h;$idx[$h]=$c};$sc=[string]$cfg.excel.storeColumn;if(-not$idx.ContainsKey($sc)){throw "Coluna '$sc' nao encontrada."};$groups=@{};for($r=2;$r-le$rows;$r++){$s=NormStore $ws.Cells.Item($r,[int]$idx[$sc]).Value2;if(-not$s){continue};if(-not$groups.ContainsKey($s)){$groups[$s]=New-Object System.Collections.ArrayList};[void]$groups[$s].Add($r)};Log("Lojas encontradas no Excel: "+$groups.Count);$stamp=Get-Date -Format 'yyyyMMdd_HHmmss';foreach($s in($groups.Keys|sort)){$rr=$groups[$s];$out=Join-Path $StoreDir("{0}_{1}.xlsx"-f$s,$stamp);$ow=$xl.Workbooks.Add();$os=$ow.Worksheets.Item(1);for($c=1;$c-le$cols;$c++){$os.Cells.Item(1,$c).Value2=$headers[$c-1]};$or=2;foreach($sr in$rr){for($c=1;$c-le$cols;$c++){$os.Cells.Item($or,$c).Value2=$ws.Cells.Item($sr,$c).Value2};$or++};$ow.SaveAs($out,51);$ow.Close($false);if(-not$map.ContainsKey($s)){Log "$s sem telefone; arquivo separado criado." 'AVISO';continue};$phone=[string]$map[$s];$msg=Message $s $ws ([int]$rr[0]) $headers $idx $cfg $rr.Count;$preview=Join-Path $PreviewDir("{0}_{1}.txt"-f$s,$stamp);Set-Content -Path $preview -Value ("Loja: $s`r`nTelefone: $phone`r`n`r`n$msg") -Encoding UTF8;if([bool]$cfg.whatsapp.dryRun){Write-Host '';Write-Host("PREVIA $s -> $phone") -ForegroundColor Yellow;Write-Host $msg;Log "$s preparado em DRY-RUN."}else{SendWA $chrome $profile $phone $msg ([int]$cfg.whatsapp.waitSeconds);Log "$s enviado.";Start-Sleep -Seconds ([int]$cfg.whatsapp.delayBetweenMessagesSeconds)}}}finally{if($wb){try{$wb.Close($false)}catch{}};if($xl){try{$xl.Quit()}catch{}};[GC]::Collect();[GC]::WaitForPendingFinalizers()}}
+function New-RoboMessage {
+    param(
+        [string]$Store,
+        $Worksheet,
+        [int]$RowNumber,
+        [array]$Headers,
+        [hashtable]$HeaderIndex,
+        $Config,
+        [int]$RecordCount
+    )
+
+    $lines = New-Object "System.Collections.Generic.List[string]"
+    $title = ([string]$Config.message.title).Replace("{loja}", $Store)
+
+    $lines.Add($title)
+    $lines.Add("")
+
+    if ([bool]$Config.message.includeRecordCount -and $RecordCount -gt 1) {
+        $lines.Add(("Registros no relatorio: {0}" -f $RecordCount))
+        $lines.Add("")
+    }
+
+    $fields = @($Config.message.fields)
+
+    if ($fields.Count -eq 0) {
+        $fields = @()
+        $maxFields = [int]$Config.message.maxAutoFields
+
+        foreach ($header in $Headers) {
+            if ($header -ne [string]$Config.excel.storeColumn) {
+                $fields += $header
+            }
+
+            if ($fields.Count -ge $maxFields) {
+                break
+            }
+        }
+    }
+
+    foreach ($field in $fields) {
+        $fieldName = [string]$field
+
+        if ($HeaderIndex.ContainsKey($fieldName)) {
+            $columnNumber = [int]$HeaderIndex[$fieldName]
+            $value = [string]$Worksheet.Cells.Item($RowNumber, $columnNumber).Text
+
+            if ([string]::IsNullOrWhiteSpace($value)) {
+                $value = "-"
+            }
+
+            $lines.Add(("{0}: {1}" -f $fieldName, $value))
+        }
+    }
+
+    $footer = [string]$Config.message.footer
+    if (-not [string]::IsNullOrWhiteSpace($footer)) {
+        $lines.Add("")
+        $lines.Add($footer.Trim())
+    }
+
+    return [string]::Join([Environment]::NewLine, $lines)
+}
+
+function Send-RoboWhatsApp {
+    param(
+        [string]$ChromePath,
+        [string]$ProfilePath,
+        [string]$Phone,
+        [string]$Message,
+        [int]$WaitSeconds
+    )
+
+    $encoded = [Uri]::EscapeDataString($Message)
+    $url = "https://web.whatsapp.com/send?phone=$Phone&text=$encoded"
+    $arguments = @("--user-data-dir=$ProfilePath", "--start-maximized", $url)
+
+    Start-Process -FilePath $ChromePath -ArgumentList $arguments | Out-Null
+    Start-Sleep -Seconds $WaitSeconds
+
+    $shell = New-Object -ComObject WScript.Shell
+    $activated = $false
+
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        if ($shell.AppActivate("WhatsApp")) {
+            $activated = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    if (-not $activated) {
+        throw "Janela do WhatsApp nao encontrada."
+    }
+
+    Start-Sleep -Milliseconds 500
+    $shell.SendKeys("{ENTER}")
+}
+
+function Invoke-RoboExcel {
+    param(
+        [string]$ExcelPath,
+        $Config,
+        [hashtable]$StoreMap,
+        [string]$ChromePath,
+        [string]$ProfilePath
+    )
+
+    $excelApp = $null
+    $workbook = $null
+    $worksheet = $null
+
+    try {
+        $excelApp = New-Object -ComObject Excel.Application
+        $excelApp.Visible = $false
+        $excelApp.DisplayAlerts = $false
+
+        $workbook = $excelApp.Workbooks.Open($ExcelPath, 0, $true)
+
+        $sheetName = [string]$Config.excel.worksheet
+        if ([string]::IsNullOrWhiteSpace($sheetName)) {
+            $worksheet = $workbook.Worksheets.Item(1)
+        }
+        else {
+            $worksheet = $workbook.Worksheets.Item($sheetName)
+        }
+
+        $usedRange = $worksheet.UsedRange
+        $rowCount = [int]$usedRange.Rows.Count
+        $columnCount = [int]$usedRange.Columns.Count
+
+        if ($rowCount -lt 2) {
+            throw "O Excel exportado nao possui linhas de dados."
+        }
+
+        $headers = @()
+        $headerIndex = @{}
+
+        for ($column = 1; $column -le $columnCount; $column++) {
+            $header = ([string]$worksheet.Cells.Item(1, $column).Text).Trim()
+
+            if ([string]::IsNullOrWhiteSpace($header)) {
+                $header = "Coluna$column"
+            }
+
+            $headers += $header
+            $headerIndex[$header] = $column
+        }
+
+        $storeColumnName = [string]$Config.excel.storeColumn
+        if (-not $headerIndex.ContainsKey($storeColumnName)) {
+            throw "Coluna '$storeColumnName' nao encontrada. Colunas detectadas: $([string]::Join(', ', $headers))"
+        }
+
+        $storeColumnNumber = [int]$headerIndex[$storeColumnName]
+        $groups = @{}
+
+        for ($row = 2; $row -le $rowCount; $row++) {
+            $store = ConvertTo-RoboStore $worksheet.Cells.Item($row, $storeColumnNumber).Value2
+
+            if ([string]::IsNullOrWhiteSpace($store)) {
+                continue
+            }
+
+            if (-not $groups.ContainsKey($store)) {
+                $groups[$store] = New-Object System.Collections.ArrayList
+            }
+
+            [void]$groups[$store].Add($row)
+        }
+
+        Write-RoboLog ("Lojas encontradas no Excel: " + $groups.Count)
+        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+        foreach ($store in ($groups.Keys | Sort-Object)) {
+            $sourceRows = $groups[$store]
+            $storeFile = Join-Path $StoreOutputDirectory ("{0}_{1}.xlsx" -f $store, $timestamp)
+
+            $outWorkbook = $null
+            $outWorksheet = $null
+
+            try {
+                $outWorkbook = $excelApp.Workbooks.Add()
+                $outWorksheet = $outWorkbook.Worksheets.Item(1)
+
+                for ($column = 1; $column -le $columnCount; $column++) {
+                    $outWorksheet.Cells.Item(1, $column).Value2 = $headers[$column - 1]
+                }
+
+                $destinationRow = 2
+
+                foreach ($sourceRow in $sourceRows) {
+                    for ($column = 1; $column -le $columnCount; $column++) {
+                        $outWorksheet.Cells.Item($destinationRow, $column).Value2 = $worksheet.Cells.Item($sourceRow, $column).Value2
+                    }
+                    $destinationRow++
+                }
+
+                $outWorkbook.SaveAs($storeFile, 51)
+            }
+            finally {
+                if ($outWorkbook) {
+                    try { $outWorkbook.Close($false) } catch {}
+                }
+                if ($outWorksheet) {
+                    try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($outWorksheet) } catch {}
+                }
+                if ($outWorkbook) {
+                    try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($outWorkbook) } catch {}
+                }
+            }
+
+            if (-not $StoreMap.ContainsKey($store)) {
+                Write-RoboLog "$store sem telefone cadastrado; arquivo separado criado." "AVISO"
+                continue
+            }
+
+            $phone = [string]$StoreMap[$store]
+            $message = New-RoboMessage $store $worksheet ([int]$sourceRows[0]) $headers $headerIndex $Config $sourceRows.Count
+
+            $previewFile = Join-Path $PreviewDirectory ("{0}_{1}.txt" -f $store, $timestamp)
+            $nl = [Environment]::NewLine
+            $previewText = "Loja: $store" + $nl + "Telefone: $phone" + $nl + $nl + $message
+            Set-Content -LiteralPath $previewFile -Value $previewText -Encoding UTF8
+
+            if ([bool]$Config.whatsapp.dryRun) {
+                Write-Host ""
+                Write-Host ("PREVIA {0} -> {1}" -f $store, $phone) -ForegroundColor Yellow
+                Write-Host $message
+                Write-RoboLog "$store preparado em DRY-RUN."
+            }
+            else {
+                Send-RoboWhatsApp $ChromePath $ProfilePath $phone $message ([int]$Config.whatsapp.waitSeconds)
+                Write-RoboLog "$store enviado."
+                Start-Sleep -Seconds ([int]$Config.whatsapp.delayBetweenMessagesSeconds)
+            }
+        }
+    }
+    finally {
+        if ($workbook) {
+            try { $workbook.Close($false) } catch {}
+        }
+
+        if ($excelApp) {
+            try { $excelApp.Quit() } catch {}
+        }
+
+        if ($worksheet) {
+            try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($worksheet) } catch {}
+        }
+        if ($workbook) {
+            try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($workbook) } catch {}
+        }
+        if ($excelApp) {
+            try { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excelApp) } catch {}
+        }
+
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+    }
+}
