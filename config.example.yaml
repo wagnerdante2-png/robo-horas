@@ -1,0 +1,55 @@
+app:
+  name: "Robo BI WhatsApp"
+  output_dir: "output"
+
+browser:
+  # Perfil exclusivo do robô. Mantém login do BI e do WhatsApp entre execuções.
+  profile_dir: ".rpa_profile"
+  headless: false
+  page_timeout_seconds: 90
+
+bi:
+  # Substitua pela URL real do relatório.
+  url: "https://app.powerbi.com/"
+  export:
+    # manual = abre o BI e aguarda você exportar o Excel.
+    # selectors = executa a sequência de cliques configurada abaixo.
+    mode: "manual"
+    timeout_seconds: 180
+    actions: []
+    # Exemplo de ação:
+    # - by: "xpath"
+    #   value: "//button[@aria-label='Mais opções']"
+    #   timeout_seconds: 30
+    #   sleep_after_seconds: 1
+
+excel:
+  # Deixe vazio para o robô tentar localizar automaticamente a planilha
+  # que contém a coluna de loja.
+  sheet_name: ""
+  header_row: 0
+  store_column: "Loja"
+  drop_empty_store: true
+
+stores:
+  mapping_file: "data/lojas.csv"
+  code_column: "loja"
+  phone_column: "telefone"
+  active_column: "ativo"
+
+message:
+  title: "📊 PARCIAL OPERACIONAL | {loja}"
+  fields: []
+  max_auto_fields: 10
+  footer: ""
+  include_record_count: true
+
+whatsapp:
+  # Segurança: mantenha true até validar mensagens e telefones.
+  dry_run: true
+  web_url: "https://web.whatsapp.com/"
+  chat_load_timeout_seconds: 60
+  delay_between_messages_seconds: 4
+
+logging:
+  level: "INFO"
