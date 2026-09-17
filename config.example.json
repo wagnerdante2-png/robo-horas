@@ -1,7 +1,7 @@
 {
   "bi": {
     "url": "https://app.powerbi.com/",
-    "exportWaitSeconds": 300
+    "exportWaitSeconds": 900
   },
   "excel": {
     "worksheet": "",
