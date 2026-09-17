@@ -16,7 +16,12 @@
   },
   "whatsapp": {
     "dryRun": true,
+    "testMode": true,
+    "testStore": "ML01",
+    "testPhone": "",
+    "useExistingChromeSession": true,
     "waitSeconds": 12,
-    "delayBetweenMessagesSeconds": 4
+    "delayBetweenMessagesSeconds": 4,
+    "pauseOnFinish": true
   }
 }
