@@ -1,2 +1,4 @@
-v0.3-portable
+RoboHoras Portable v0.5
 Build: 2026-09-17
+Modo de teste com Excel existente em Downloads
+Sem instalacao | Sem Python | Sem GitHub Actions
