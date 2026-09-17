@@ -1,0 +1,2 @@
+v0.3-portable
+Build: 2026-09-17
