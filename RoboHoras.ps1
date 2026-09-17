@@ -1,3 +1,9 @@
+Write-Host ""
+Write-Host "===============================================" -ForegroundColor Cyan
+Write-Host " ROBO HORAS - PORTABLE v0.3" -ForegroundColor Cyan
+Write-Host " SEM INSTALACAO | SEM PYTHON | SEM ACTIONS" -ForegroundColor Cyan
+Write-Host "===============================================" -ForegroundColor Cyan
+Write-Host ""
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
