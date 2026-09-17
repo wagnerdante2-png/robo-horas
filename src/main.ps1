@@ -31,19 +31,54 @@ try {
     $downloadsPath = [string]$snapshot.Directory
     $before = [hashtable]$snapshot.Files
 
-    $biUrl = [string]$config.bi.url
-    if ([string]::IsNullOrWhiteSpace($biUrl)) {
-        throw "Defina bi.url em config.json."
+    Write-Host ""
+    Write-Host "Escolha o modo de execucao:" -ForegroundColor Cyan
+    Write-Host "  1 - Usar o Excel mais recente que ja esta em Downloads"
+    Write-Host "  2 - Abrir o BI e aguardar uma nova exportacao"
+    Write-Host ""
+    $choice = Read-Host "Opcao [1]"
+    if ([string]::IsNullOrWhiteSpace($choice)) {
+        $choice = "1"
     }
 
-    Write-RoboLog ("Abrindo BI: " + $biUrl)
+    $excelPath = $null
 
-    $chromeArguments = @("--user-data-dir=$profilePath", "--start-maximized", $biUrl)
-    Start-Process -FilePath $chromePath -ArgumentList $chromeArguments | Out-Null
+    if ($choice -eq "1") {
+        $latestExcel = Get-ChildItem -LiteralPath $downloadsPath -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in @(".xlsx", ".xls") -and -not $_.Name.StartsWith("~$") } |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
 
-    $excelPath = Wait-RoboExcel $downloadsPath $before ([int]$config.bi.exportWaitSeconds)
+        if (-not $latestExcel) {
+            throw "Nenhum arquivo Excel foi encontrado em $downloadsPath."
+        }
+
+        $excelPath = $latestExcel.FullName
+        Write-RoboLog ("Modo teste: usando Excel existente: " + $excelPath)
+    }
+    elseif ($choice -eq "2") {
+        $biUrl = [string]$config.bi.url
+        if ([string]::IsNullOrWhiteSpace($biUrl)) {
+            throw "Defina bi.url em config.json."
+        }
+
+        Write-RoboLog ("Abrindo BI: " + $biUrl)
+
+        $chromeArguments = @("--user-data-dir=$profilePath", "--start-maximized", $biUrl)
+        Start-Process -FilePath $chromePath -ArgumentList $chromeArguments | Out-Null
+
+        $waitSeconds = 900
+        if ($config.bi.PSObject.Properties.Name -contains "exportWaitSeconds") {
+            $waitSeconds = [int]$config.bi.exportWaitSeconds
+        }
+
+        $excelPath = Wait-RoboExcel $downloadsPath $before $waitSeconds
+    }
+    else {
+        throw "Opcao invalida. Execute novamente e escolha 1 ou 2."
+    }
+
     $storeMap = Get-RoboStoreMap
-
     Invoke-RoboExcel $excelPath $config $storeMap $chromePath $profilePath
 
     Write-RoboLog "Processamento concluido."
