@@ -1,5 +1,6 @@
-RoboHoras Portable v0.6
+RoboHoras Portable v0.7
 Build: 2026-09-17
-Teste controlado de WhatsApp Web: uma mensagem por execucao
-Usa Chrome existente quando configurado
+Envio automatico via UI Automation do Windows
+Modo de teste limitado a uma mensagem por execucao
+Configuracao futura de agendamento preparada e desativada
 Sem instalacao | Sem Python | Sem GitHub Actions
