@@ -61,6 +61,74 @@ function New-RoboMessage {
     return [string]::Join([Environment]::NewLine, $lines)
 }
 
+function Invoke-RoboWhatsAppSendButton {
+    param(
+        [string[]]$ButtonNames = @("Enviar", "Send"),
+        [int]$TimeoutSeconds = 25
+    )
+
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $windowCondition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Window
+    )
+    $buttonCondition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button
+    )
+
+    while ((Get-Date) -lt $deadline) {
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $windowCondition)
+
+        foreach ($window in $windows) {
+            $windowName = [string]$window.Current.Name
+            if ($windowName -notmatch "WhatsApp") {
+                continue
+            }
+
+            $buttons = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $buttonCondition)
+            foreach ($button in $buttons) {
+                $name = ([string]$button.Current.Name).Trim()
+                if ([string]::IsNullOrWhiteSpace($name)) {
+                    continue
+                }
+
+                $matches = $false
+                foreach ($expected in $ButtonNames) {
+                    if ($name.Equals([string]$expected, [StringComparison]::OrdinalIgnoreCase)) {
+                        $matches = $true
+                        break
+                    }
+                }
+
+                if (-not $matches) {
+                    continue
+                }
+
+                try {
+                    $patternObject = $null
+                    if ($button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$patternObject)) {
+                        ([System.Windows.Automation.InvokePattern]$patternObject).Invoke()
+                        Write-RoboLog ("Botao do WhatsApp acionado via UI Automation: " + $name)
+                        return $true
+                    }
+                }
+                catch {
+                    Write-RoboLog ("Falha ao acionar botao '$name': " + $_.Exception.Message) "AVISO"
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    return $false
+}
+
 function Send-RoboWhatsApp {
     param(
         [string]$ChromePath,
@@ -68,7 +136,10 @@ function Send-RoboWhatsApp {
         [string]$Phone,
         [string]$Message,
         [int]$WaitSeconds,
-        [bool]$UseExistingChromeSession = $true
+        [bool]$UseExistingChromeSession = $true,
+        [bool]$UseUiAutomationSend = $true,
+        [int]$SendButtonTimeoutSeconds = 25,
+        [string[]]$SendButtonNames = @("Enviar", "Send")
     )
 
     $encoded = [Uri]::EscapeDataString($Message)
@@ -83,6 +154,16 @@ function Send-RoboWhatsApp {
 
     Start-Process -FilePath $ChromePath -ArgumentList $arguments | Out-Null
     Start-Sleep -Seconds $WaitSeconds
+
+    if ($UseUiAutomationSend) {
+        $clicked = Invoke-RoboWhatsAppSendButton -ButtonNames $SendButtonNames -TimeoutSeconds $SendButtonTimeoutSeconds
+        if ($clicked) {
+            Start-Sleep -Seconds 2
+            return
+        }
+
+        throw "O WhatsApp abriu a conversa, mas o botao Enviar nao foi localizado automaticamente."
+    }
 
     $shell = New-Object -ComObject WScript.Shell
     $activated = $false
@@ -182,6 +263,9 @@ function Invoke-RoboExcel {
         $testStore = "ML01"
         $testPhone = ""
         $useExistingChromeSession = $true
+        $useUiAutomationSend = $true
+        $sendButtonTimeoutSeconds = 25
+        $sendButtonNames = @("Enviar", "Send")
 
         if ($Config.whatsapp.PSObject.Properties.Name -contains "testMode") {
             $testMode = [bool]$Config.whatsapp.testMode
@@ -194,6 +278,15 @@ function Invoke-RoboExcel {
         }
         if ($Config.whatsapp.PSObject.Properties.Name -contains "useExistingChromeSession") {
             $useExistingChromeSession = [bool]$Config.whatsapp.useExistingChromeSession
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "useUiAutomationSend") {
+            $useUiAutomationSend = [bool]$Config.whatsapp.useUiAutomationSend
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "sendButtonTimeoutSeconds") {
+            $sendButtonTimeoutSeconds = [int]$Config.whatsapp.sendButtonTimeoutSeconds
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "sendButtonNames") {
+            $sendButtonNames = @($Config.whatsapp.sendButtonNames)
         }
 
         $messagesSent = 0
@@ -267,7 +360,7 @@ function Invoke-RoboExcel {
                 Write-RoboLog "$store preparado em DRY-RUN."
             }
             else {
-                Send-RoboWhatsApp $ChromePath $ProfilePath $phone $message ([int]$Config.whatsapp.waitSeconds) $useExistingChromeSession
+                Send-RoboWhatsApp $ChromePath $ProfilePath $phone $message ([int]$Config.whatsapp.waitSeconds) $useExistingChromeSession $useUiAutomationSend $sendButtonTimeoutSeconds $sendButtonNames
                 Write-RoboLog "$store enviado."
                 $messagesSent++
 
