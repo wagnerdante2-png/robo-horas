@@ -1,5 +1,6 @@
-RoboHoras Portable v0.7
+RoboHoras Portable v0.8
 Build: 2026-09-17
+Lista configuravel de ate 3 destinatarios de teste
 Envio automatico via UI Automation do Windows
 Modo de teste limitado a uma mensagem por execucao
 Configuracao futura de agendamento preparada e desativada
