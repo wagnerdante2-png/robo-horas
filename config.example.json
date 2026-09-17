@@ -19,6 +19,11 @@
     "testMode": true,
     "testStore": "ML01",
     "testPhone": "",
+    "testRecipients": [
+      {"name": "Teste 1", "phone": "", "enabled": true},
+      {"name": "Teste 2", "phone": "", "enabled": true},
+      {"name": "Teste 3", "phone": "", "enabled": true}
+    ],
     "useExistingChromeSession": true,
     "useUiAutomationSend": true,
     "sendButtonNames": ["Enviar", "Send"],
