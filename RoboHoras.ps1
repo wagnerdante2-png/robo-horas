@@ -1,6 +1,6 @@
 Write-Host ""
 Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " ROBO HORAS - PORTABLE v0.3" -ForegroundColor Cyan
+Write-Host " ROBO HORAS - PORTABLE v0.4" -ForegroundColor Cyan
 Write-Host " SEM INSTALACAO | SEM PYTHON | SEM ACTIONS" -ForegroundColor Cyan
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
