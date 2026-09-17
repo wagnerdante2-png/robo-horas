@@ -8,7 +8,7 @@ try {
 
         Write-Host ""
         Write-Host "Primeira execucao: config.json e data\lojas.csv foram criados." -ForegroundColor Yellow
-        Write-Host "Edite os dois arquivos e execute RoboHoras.exe novamente." -ForegroundColor Yellow
+        Write-Host "Edite os dois arquivos se desejar e execute RoboHoras.exe novamente." -ForegroundColor Yellow
         Write-Host ""
 
         Start-Process -FilePath notepad.exe -ArgumentList $ConfigPath
@@ -26,6 +26,51 @@ try {
 
     $profilePath = Join-Path $env:LOCALAPPDATA "RoboHoras\ChromeProfile"
     Ensure-RoboDirectory $profilePath
+
+    $testMode = $false
+    if ($config.whatsapp.PSObject.Properties.Name -contains "testMode") {
+        $testMode = [bool]$config.whatsapp.testMode
+    }
+
+    if ($testMode) {
+        $testPhone = ""
+        if ($config.whatsapp.PSObject.Properties.Name -contains "testPhone") {
+            $testPhone = ConvertTo-RoboPhone ([string]$config.whatsapp.testPhone)
+        }
+
+        if ([string]::IsNullOrWhiteSpace($testPhone)) {
+            Write-Host ""
+            Write-Host "MODO DE TESTE DO WHATSAPP" -ForegroundColor Yellow
+            Write-Host "Digite o numero que deve receber a unica mensagem de teste."
+            Write-Host "Formato: DDI + DDD + numero, somente digitos. Ex.: 5511999999999"
+            $testPhone = ConvertTo-RoboPhone (Read-Host "WhatsApp de teste")
+        }
+
+        if ($testPhone.Length -lt 10) {
+            throw "Telefone de teste invalido. Use DDI + DDD + numero."
+        }
+
+        $config.whatsapp.testPhone = $testPhone
+
+        if ([bool]$config.whatsapp.dryRun) {
+            Write-Host ""
+            $realSend = Read-Host "Deseja fazer UM envio real para $testPhone agora? [s/N]"
+            if ($realSend -match '^(s|sim|y|yes)$') {
+                $config.whatsapp.dryRun = $false
+            }
+        }
+
+        if (-not [bool]$config.whatsapp.dryRun) {
+            Write-Host ""
+            Write-Host "ATENCAO: sera enviada somente UMA mensagem pelo WhatsApp Web." -ForegroundColor Yellow
+            Write-Host ("Destino: " + $testPhone) -ForegroundColor Yellow
+            $confirm = Read-Host "Digite ENVIAR para confirmar"
+            if ($confirm -ne "ENVIAR") {
+                Write-Host "Envio cancelado. O robo continuara em simulacao." -ForegroundColor Yellow
+                $config.whatsapp.dryRun = $true
+            }
+        }
+    }
 
     $snapshot = Get-RoboDownloadSnapshot
     $downloadsPath = [string]$snapshot.Directory
@@ -84,6 +129,15 @@ try {
     Write-RoboLog "Processamento concluido."
     Write-Host ""
     Write-Host "Concluido. Consulte a pasta output." -ForegroundColor Green
+
+    $pauseOnFinish = $true
+    if ($config.whatsapp.PSObject.Properties.Name -contains "pauseOnFinish") {
+        $pauseOnFinish = [bool]$config.whatsapp.pauseOnFinish
+    }
+    if ($pauseOnFinish) {
+        Write-Host ""
+        Read-Host "Pressione ENTER para fechar"
+    }
 }
 catch {
     Write-RoboLog $_.Exception.Message "ERRO"
