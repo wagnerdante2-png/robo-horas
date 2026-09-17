@@ -30,6 +30,9 @@
     "sendButtonTimeoutSeconds": 25,
     "waitSeconds": 12,
     "delayBetweenMessagesSeconds": 4,
+    "continueOnSendError": true,
+    "sendRetryCount": 1,
+    "sendRetryDelaySeconds": 3,
     "pauseOnFinish": true
   },
   "schedule": {
