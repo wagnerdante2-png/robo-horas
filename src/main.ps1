@@ -34,16 +34,75 @@ try {
 
     if ($testMode) {
         $testPhone = ""
-        if ($config.whatsapp.PSObject.Properties.Name -contains "testPhone") {
-            $testPhone = ConvertTo-RoboPhone ([string]$config.whatsapp.testPhone)
+        $selectedRecipientName = "Numero avulso"
+        $recipients = @()
+
+        if ($config.whatsapp.PSObject.Properties.Name -contains "testRecipients") {
+            foreach ($recipient in @($config.whatsapp.testRecipients)) {
+                $enabled = $true
+                if ($recipient.PSObject.Properties.Name -contains "enabled") {
+                    $enabled = [bool]$recipient.enabled
+                }
+                if ($enabled) {
+                    $recipients += $recipient
+                }
+            }
         }
 
-        if ([string]::IsNullOrWhiteSpace($testPhone)) {
+        Write-Host ""
+        Write-Host "MODO DE TESTE DO WHATSAPP" -ForegroundColor Yellow
+
+        if ($recipients.Count -gt 0) {
+            Write-Host "Destinatarios pre-configurados:" -ForegroundColor Cyan
+            for ($i = 0; $i -lt $recipients.Count; $i++) {
+                $recipient = $recipients[$i]
+                $name = [string]$recipient.name
+                if ([string]::IsNullOrWhiteSpace($name)) { $name = "Teste $($i + 1)" }
+                $phoneText = ConvertTo-RoboPhone ([string]$recipient.phone)
+                if ([string]::IsNullOrWhiteSpace($phoneText)) { $phoneText = "nao configurado" }
+                Write-Host ("  {0} - {1} | {2}" -f ($i + 1), $name, $phoneText)
+            }
+            Write-Host "  0 - Digitar outro numero"
             Write-Host ""
-            Write-Host "MODO DE TESTE DO WHATSAPP" -ForegroundColor Yellow
-            Write-Host "Digite o numero que deve receber a unica mensagem de teste."
-            Write-Host "Formato: DDI + DDD + numero, somente digitos. Ex.: 5511999999999"
-            $testPhone = ConvertTo-RoboPhone (Read-Host "WhatsApp de teste")
+
+            $recipientChoice = Read-Host "Escolha o destinatario [1]"
+            if ([string]::IsNullOrWhiteSpace($recipientChoice)) { $recipientChoice = "1" }
+
+            $recipientIndex = 0
+            if (-not [int]::TryParse($recipientChoice, [ref]$recipientIndex)) {
+                throw "Opcao de destinatario invalida."
+            }
+
+            if ($recipientIndex -eq 0) {
+                $testPhone = ConvertTo-RoboPhone (Read-Host "WhatsApp de teste (DDI + DDD + numero)")
+            }
+            elseif ($recipientIndex -ge 1 -and $recipientIndex -le $recipients.Count) {
+                $selected = $recipients[$recipientIndex - 1]
+                $selectedRecipientName = [string]$selected.name
+                if ([string]::IsNullOrWhiteSpace($selectedRecipientName)) {
+                    $selectedRecipientName = "Teste $recipientIndex"
+                }
+                $testPhone = ConvertTo-RoboPhone ([string]$selected.phone)
+
+                if ([string]::IsNullOrWhiteSpace($testPhone)) {
+                    Write-Host ("O numero de '{0}' ainda nao esta configurado." -f $selectedRecipientName) -ForegroundColor Yellow
+                    $testPhone = ConvertTo-RoboPhone (Read-Host "Digite o numero para este teste")
+                }
+            }
+            else {
+                throw "Opcao de destinatario fora da lista."
+            }
+        }
+        else {
+            if ($config.whatsapp.PSObject.Properties.Name -contains "testPhone") {
+                $testPhone = ConvertTo-RoboPhone ([string]$config.whatsapp.testPhone)
+            }
+
+            if ([string]::IsNullOrWhiteSpace($testPhone)) {
+                Write-Host "Digite o numero que deve receber a unica mensagem de teste."
+                Write-Host "Formato: DDI + DDD + numero, somente digitos. Ex.: 5511999999999"
+                $testPhone = ConvertTo-RoboPhone (Read-Host "WhatsApp de teste")
+            }
         }
 
         if ($testPhone.Length -lt 10) {
@@ -54,7 +113,7 @@ try {
 
         if ([bool]$config.whatsapp.dryRun) {
             Write-Host ""
-            $realSend = Read-Host "Deseja fazer UM envio real para $testPhone agora? [s/N]"
+            $realSend = Read-Host ("Deseja fazer UM envio real para {0} ({1}) agora? [s/N]" -f $selectedRecipientName, $testPhone)
             if ($realSend -match '^(s|sim|y|yes)$') {
                 $config.whatsapp.dryRun = $false
             }
@@ -63,7 +122,7 @@ try {
         if (-not [bool]$config.whatsapp.dryRun) {
             Write-Host ""
             Write-Host "ATENCAO: sera enviada somente UMA mensagem pelo WhatsApp Web." -ForegroundColor Yellow
-            Write-Host ("Destino: " + $testPhone) -ForegroundColor Yellow
+            Write-Host ("Destino: {0} | {1}" -f $selectedRecipientName, $testPhone) -ForegroundColor Yellow
             $confirm = Read-Host "Digite ENVIAR para confirmar"
             if ($confirm -ne "ENVIAR") {
                 Write-Host "Envio cancelado. O robo continuara em simulacao." -ForegroundColor Yellow
