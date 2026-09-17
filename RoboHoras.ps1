@@ -1,7 +1,7 @@
 Write-Host ""
 Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " ROBO HORAS - PORTABLE v0.7" -ForegroundColor Cyan
-Write-Host " TESTE DE ENVIO AUTOMATICO | WHATSAPP WEB" -ForegroundColor Cyan
+Write-Host " ROBO HORAS - PORTABLE v0.8" -ForegroundColor Cyan
+Write-Host " TESTE COM LISTA DE DESTINATARIOS | WHATSAPP WEB" -ForegroundColor Cyan
 Write-Host " SEM INSTALACAO | SEM PYTHON | SEM ACTIONS" -ForegroundColor Cyan
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
