@@ -20,8 +20,21 @@
     "testStore": "ML01",
     "testPhone": "",
     "useExistingChromeSession": true,
+    "useUiAutomationSend": true,
+    "sendButtonNames": ["Enviar", "Send"],
+    "sendButtonTimeoutSeconds": 25,
     "waitSeconds": 12,
     "delayBetweenMessagesSeconds": 4,
     "pauseOnFinish": true
+  },
+  "schedule": {
+    "enabled": false,
+    "time": "07:00",
+    "days": ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
+    "runMissedAsSoonAsPossible": true,
+    "preventDuplicateSameDay": true,
+    "retryFailedStores": true,
+    "requireNetwork": true,
+    "lateRunPolicy": "same_day_any_time"
   }
 }
