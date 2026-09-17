@@ -67,12 +67,19 @@ function Send-RoboWhatsApp {
         [string]$ProfilePath,
         [string]$Phone,
         [string]$Message,
-        [int]$WaitSeconds
+        [int]$WaitSeconds,
+        [bool]$UseExistingChromeSession = $true
     )
 
     $encoded = [Uri]::EscapeDataString($Message)
     $url = "https://web.whatsapp.com/send?phone=$Phone&text=$encoded"
-    $arguments = @("--user-data-dir=$ProfilePath", "--start-maximized", $url)
+
+    if ($UseExistingChromeSession) {
+        $arguments = @("--start-maximized", $url)
+    }
+    else {
+        $arguments = @("--user-data-dir=$ProfilePath", "--start-maximized", $url)
+    }
 
     Start-Process -FilePath $ChromePath -ArgumentList $arguments | Out-Null
     Start-Sleep -Seconds $WaitSeconds
@@ -80,7 +87,7 @@ function Send-RoboWhatsApp {
     $shell = New-Object -ComObject WScript.Shell
     $activated = $false
 
-    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
         if ($shell.AppActivate("WhatsApp")) {
             $activated = $true
             break
@@ -89,10 +96,10 @@ function Send-RoboWhatsApp {
     }
 
     if (-not $activated) {
-        throw "Janela do WhatsApp nao encontrada."
+        throw "Janela do WhatsApp Web nao encontrada. Confirme que o Chrome abriu a conversa."
     }
 
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 700
     $shell.SendKeys("{ENTER}")
 }
 
@@ -171,7 +178,31 @@ function Invoke-RoboExcel {
         Write-RoboLog ("Lojas encontradas no Excel: " + $groups.Count)
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
+        $testMode = $false
+        $testStore = "ML01"
+        $testPhone = ""
+        $useExistingChromeSession = $true
+
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "testMode") {
+            $testMode = [bool]$Config.whatsapp.testMode
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "testStore") {
+            $testStore = ConvertTo-RoboStore ([string]$Config.whatsapp.testStore)
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "testPhone") {
+            $testPhone = ConvertTo-RoboPhone ([string]$Config.whatsapp.testPhone)
+        }
+        if ($Config.whatsapp.PSObject.Properties.Name -contains "useExistingChromeSession") {
+            $useExistingChromeSession = [bool]$Config.whatsapp.useExistingChromeSession
+        }
+
+        $messagesSent = 0
+
         foreach ($store in ($groups.Keys | Sort-Object)) {
+            if ($testMode -and $store -ne $testStore) {
+                continue
+            }
+
             $sourceRows = $groups[$store]
             $storeFile = Join-Path $StoreOutputDirectory ("{0}_{1}.xlsx" -f $store, $timestamp)
 
@@ -209,12 +240,19 @@ function Invoke-RoboExcel {
                 }
             }
 
-            if (-not $StoreMap.ContainsKey($store)) {
-                Write-RoboLog "$store sem telefone cadastrado; arquivo separado criado." "AVISO"
+            $phone = ""
+            if ($testMode) {
+                $phone = $testPhone
+            }
+            elseif ($StoreMap.ContainsKey($store)) {
+                $phone = [string]$StoreMap[$store]
+            }
+
+            if ([string]::IsNullOrWhiteSpace($phone)) {
+                Write-RoboLog "$store sem telefone valido; arquivo separado criado." "AVISO"
                 continue
             }
 
-            $phone = [string]$StoreMap[$store]
             $message = New-RoboMessage $store $worksheet ([int]$sourceRows[0]) $headers $headerIndex $Config $sourceRows.Count
 
             $previewFile = Join-Path $PreviewDirectory ("{0}_{1}.txt" -f $store, $timestamp)
@@ -229,10 +267,21 @@ function Invoke-RoboExcel {
                 Write-RoboLog "$store preparado em DRY-RUN."
             }
             else {
-                Send-RoboWhatsApp $ChromePath $ProfilePath $phone $message ([int]$Config.whatsapp.waitSeconds)
+                Send-RoboWhatsApp $ChromePath $ProfilePath $phone $message ([int]$Config.whatsapp.waitSeconds) $useExistingChromeSession
                 Write-RoboLog "$store enviado."
+                $messagesSent++
+
+                if ($testMode -and $messagesSent -ge 1) {
+                    Write-RoboLog "Modo de teste: limite de uma mensagem atingido."
+                    break
+                }
+
                 Start-Sleep -Seconds ([int]$Config.whatsapp.delayBetweenMessagesSeconds)
             }
+        }
+
+        if ($testMode -and -not $groups.ContainsKey($testStore)) {
+            throw "A loja de teste '$testStore' nao foi encontrada no Excel."
         }
     }
     finally {
